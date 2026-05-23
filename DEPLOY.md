@@ -61,12 +61,13 @@ Keep this URL handy — you'll paste it into Vercel in step 4.
    | `DATABASE_URL`      | (the Neon pooled URL from step 2, with `sslmode=require`)                 |
    | `AUTH_SECRET`       | generate locally with: `openssl rand -base64 32`                          |
    | `AUTH_TRUST_HOST`   | `true`                                                                    |
-   | `SMTP_HOST`         | `smtp.resend.com`                                                         |
-   | `SMTP_PORT`         | `465`                                                                     |
-   | `SMTP_SECURE`       | `true`                                                                    |
-   | `SMTP_USER`         | `resend`                                                                  |
-   | `SMTP_PASS`         | your Resend API key (`re_…`)                                              |
+   | `RESEND_API_KEY`    | your Resend API key (`re_…`)                                              |
    | `MAIL_FROM`         | `MM26 <onboarding@resend.dev>`                                            |
+
+   > **Email gotcha:** with the default `onboarding@resend.dev` sender, Resend will only
+   > deliver to the email address you registered your Resend account with. To send to
+   > anyone else (real users), verify a domain in Resend (Domains → Add Domain → add the
+   > DNS records), then set `MAIL_FROM` to something like `MM26 <noreply@yourdomain.com>`.
 
 6. Click **Deploy**. The first build will:
    - install dependencies → `postinstall` generates the Prisma client
@@ -129,5 +130,7 @@ A few things you'll likely want next:
 - Make sure `AUTH_TRUST_HOST=true` is set for Preview, not just Production.
 
 **Email not arriving**
-- Open the Resend dashboard → Emails. If the email is logged there but didn't reach you, the user's mailbox classified it (Resend's `onboarding@resend.dev` works but can land in spam). Verify your own domain to fix this.
-- If Resend has no log, check Vercel function logs — there's likely an SMTP auth error.
+- Most common cause: you're using `onboarding@resend.dev` and trying to email an address other than your own Resend account email. Resend silently refuses these. Fix: verify a domain in Resend and set `MAIL_FROM` to an address on that domain — or, just to test, sign up on the live site using the exact email you registered with Resend.
+- Open the Resend dashboard → Emails. If the email appears there, sending worked; delivery/spam is the issue. If it does NOT appear, the API call failed — check Vercel logs.
+- Check Vercel → Deployments → your deploy → Functions logs. The mailer now throws on Resend API errors, so a failed send will show `Resend API error 4xx: …` with the exact reason.
+- Confirm `RESEND_API_KEY` is set for the environment you're testing (Production vs Preview).
