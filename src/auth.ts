@@ -2,12 +2,12 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { authConfig } from "@/auth.config";
 
+// Full auth instance (Node runtime). Adds the Credentials provider on top of
+// the edge-safe base config. Used by API routes and server components.
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-  },
+  ...authConfig,
   providers: [
     Credentials({
       name: "Email and password",
@@ -37,18 +37,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.uid = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token?.uid && session.user) {
-        (session.user as { id?: string }).id = token.uid as string;
-      }
-      return session;
-    },
-  },
 });
