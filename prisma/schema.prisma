@@ -1,0 +1,204 @@
+// MM26 — Tennis & Padel Tournament Platform
+// Vertical-slice schema. Models cover what the spec describes today;
+// fields are minimal but ready to grow (per-draw limits, doubles, news details, etc).
+
+generator client {
+  provider      = "prisma-client-js"
+  // Vercel's serverless runtime needs the RHEL OpenSSL 3 binary.
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Sport {
+  TENNIS
+  PADEL
+}
+
+enum DrawFormat {
+  SINGLES
+  DOUBLES
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum DrawGender {
+  MENS
+  WOMENS
+  MIXED
+}
+
+enum AgeGroup {
+  U6
+  U8
+  U9
+  U10
+  U11
+  U12
+  U14
+  U16
+  U18
+  OPEN
+  PLUS35
+  PLUS45
+  PLUS50
+}
+
+enum RegistrationStatus {
+  PENDING_PARTNER
+  CONFIRMED
+  WAITLIST
+  CANCELLED
+}
+
+enum TournamentVisibility {
+  PUBLIC
+  UNLISTED
+}
+
+// A user account. The owner of the account (the adult) is itself a Player.
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  emailVerified DateTime?
+  role          Role      @default(USER)
+  createdAt     DateTime  @default(now())
+
+  // The player record for the account holder themselves.
+  selfPlayer    Player    @relation("AccountSelfPlayer", fields: [selfPlayerId], references: [id])
+  selfPlayerId  String    @unique
+
+  // Children added under this account.
+  children      Player[]  @relation("AccountChildren")
+
+  // Tournaments this user organizes.
+  organized     Tournament[] @relation("OrganizerTournaments")
+}
+
+// A player is anyone who can register for a tournament: an account holder or a child.
+// Every player gets a unique playerId like "P-00128" (per requirement).
+model Player {
+  id           String   @id @default(cuid())
+  playerId     String   @unique // e.g. "P-00128"
+  firstName    String
+  surname      String
+  dateOfBirth  DateTime
+  gender       Gender
+  nationality  String
+  mobile       String?
+
+  // Set only when this player is a child of an account.
+  parentAccount   User?   @relation("AccountChildren", fields: [parentAccountId], references: [id])
+  parentAccountId String?
+
+  // Back-relation for the account whose self-player this is.
+  ownedByUser  User?    @relation("AccountSelfPlayer")
+
+  registrations Registration[]
+  createdAt    DateTime @default(now())
+}
+
+model Tournament {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  sport       Sport
+  location    String
+  startDate   DateTime
+  endDate     DateTime
+  visibility  TournamentVisibility @default(PUBLIC)
+  themeAccent String   @default("#185FA5")
+  coverImage  String?
+  overallLimit Int?
+  createdAt   DateTime @default(now())
+
+  organizer   User     @relation("OrganizerTournaments", fields: [organizerId], references: [id])
+  organizerId String
+
+  draws       Draw[]
+  news        NewsPost[]
+}
+
+model Draw {
+  id            String   @id @default(cuid())
+  tournament    Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId  String
+
+  categoryName  String
+  format        DrawFormat @default(SINGLES)
+  ageGroup      AgeGroup   @default(OPEN)
+  gender        DrawGender @default(MENS)
+  startDate     DateTime
+  endDate       DateTime
+  playerLimit   Int        @default(32)
+  isPublished   Boolean    @default(false)
+
+  registrations Registration[]
+  matches       Match[]
+}
+
+// One registration row per player per draw.
+// For doubles, the two registrations are linked via partnerRegistrationId once both confirm.
+model Registration {
+  id        String   @id @default(cuid())
+  draw      Draw     @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  drawId    String
+  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  playerId  String
+
+  status    RegistrationStatus @default(CONFIRMED)
+
+  // Sport-specific info captured at registration time.
+  utr       Float?
+  wtn       Float?
+  tennisLevel Float?
+  padelLevel  Float?
+
+  // Doubles: the player ID the user named as their partner (free text until linked).
+  assignedPartnerPlayerId String?
+  // The actual matched Registration once both sides confirm.
+  partnerRegistration   Registration? @relation("PartnerLink", fields: [partnerRegistrationId], references: [id])
+  partnerRegistrationId String?  @unique
+  partnerOf             Registration? @relation("PartnerLink")
+
+  createdAt DateTime @default(now())
+
+  @@unique([drawId, playerId])
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  draw      Draw     @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  drawId    String
+  round     Int      // 1 = R1, 2 = QF, etc. (depends on draw size)
+  slot      Int      // position within the round
+  court     String?
+  scheduledAt DateTime?
+  playerOneId String?
+  playerTwoId String?
+  scoreJson String?  // serialized set scores
+  winnerPlayerId String?
+}
+
+model NewsPost {
+  id          String   @id @default(cuid())
+  tournament  Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  tournamentId String
+  shortText   String
+  body        String
+  photoUrl    String?
+  createdAt   DateTime @default(now())
+}
